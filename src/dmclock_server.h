@@ -802,6 +802,7 @@ namespace crimson {
       double           anticipation_timeout;
 
       std::atomic_bool finishing;
+      std::atomic_bool notified;
 
       // every request creates a tick
       Counter tick = 0;
@@ -846,6 +847,7 @@ namespace crimson {
 	reject_threshold(get_or_default(at_limit_param, RejectThreshold{0})),
 	anticipation_timeout(_anticipation_timeout),
 	finishing(false),
+	notified(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
 	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
 	check_time(std::chrono::duration_cast<Duration>(_check_time)),
@@ -1762,13 +1764,14 @@ namespace crimson {
 
 	while (!this->finishing) {
 	  // predicate for cond.wait()
-	  const auto pred = [this] () -> bool { return this->finishing; };
+	  const auto pred = [this] () -> bool { return this->finishing || this->notified; };
 
+	  this->notified = false;
 	  if (TimeZero == sched_ahead_when) {
 	    sched_ahead_cv.wait(l, pred);
 	  } else {
 	    // cast from Time -> duration<Time> -> Duration -> TimePoint
-	    const auto until = typename super::TimePoint{
+	    const auto until = typename std::chrono::system_clock::time_point{
 		duration_cast<typename super::Duration>(
 		    std::chrono::duration<Time>{sched_ahead_when})};
 	    sched_ahead_cv.wait_until(l, until, pred);
@@ -1793,6 +1796,7 @@ namespace crimson {
 	if (this->finishing) return;
 	if (TimeZero == sched_ahead_when || when < sched_ahead_when) {
 	  sched_ahead_when = when;
+	  this->notified = true;
 	  sched_ahead_cv.notify_one();
 	}
       }
