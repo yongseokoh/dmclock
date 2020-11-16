@@ -1777,8 +1777,10 @@ namespace crimson {
 
 	    l.unlock();
 	    if (!this->finishing) {
-	      typename super::DataGuard g(this->data_mtx);
-	      schedule_request();
+              while (sched_ahead_when == TimeZero && this->request_count() > 0) {
+                typename super::DataGuard g(this->data_mtx);
+                schedule_request();
+              }
 	    }
 	    l.lock();
 	  }
